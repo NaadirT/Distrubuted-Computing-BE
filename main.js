@@ -2,7 +2,9 @@ const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const cors = require('cors'); // Import the path module
+const cors = require('cors');
+const readline = require('readline');
+
 const app = express();
 const port = 3000;
 
@@ -14,20 +16,26 @@ app.post('/checkPassword', (req, res) => {
     const inputHash = req.body.inputHash;
     const selectedAlgorithm = req.body.algorithm;
 
-    const wordlist = fs.readFileSync(path.join(__dirname, '10-million-password-list-top-1000000.txt'), 'utf8').split('\n');
+    const wordlistStream = fs.createReadStream(path.join(__dirname, 'xato-net-10-million-passwords.txt'), 'utf8');
 
-    const hashedWordlist = wordlist.map(word => {
-        const hash = crypto.createHash(selectedAlgorithm).update(word.trim()).digest('hex');
-        return { password: word.trim(), hash: hash };
+    const rl = readline.createInterface({
+        input: wordlistStream,
+        crlfDelay: Infinity
     });
 
-    const matchedEntry = hashedWordlist.find(entry => entry.hash === inputHash);
+    rl.on('line', (line) => {
+        const hash = crypto.createHash(selectedAlgorithm).update(line.trim()).digest('hex');
+        if (hash === inputHash) {
+            res.send(`Password found in wordlist: ${line.trim()}`);
+            rl.close(); // Stop further processing once the password is found
+        }
+    });
 
-    if (matchedEntry) {
-        res.send(`Password found in wordlist: ${matchedEntry.password}`);
-    } else {
-        res.send('Password not found in wordlist.');
-    }
+    rl.on('close', () => {
+        if (!res.headersSent) { // Check if response has already been sent
+            res.send('Password not found in wordlist.');
+        }
+    });
 });
 
 app.listen(port, () => {
